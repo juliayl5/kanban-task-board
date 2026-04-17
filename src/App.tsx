@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   DndContext,
   DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
   type DragEndEvent,
   type DragStartEvent,
   closestCorners,
@@ -561,12 +564,9 @@ function DraggableTaskCard({
   onOpenDetails: (task: Task) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({
-      id: getTaskDragId(task.id),
-      activationConstraint: {
-        distance: 8,
-      },
-    })
+  useDraggable({
+    id: getTaskDragId(task.id),
+  })
 
   const style = transform
     ? {
@@ -701,6 +701,14 @@ export default function App() {
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [activeDragTaskId, setActiveDragTaskId] = useState<string | null>(null)
+
+  const sensors = useSensors(
+  	useSensor(PointerSensor, {
+    	activationConstraint: {
+      	distance: 8,
+   	 },
+	  }),
+	)	
 
   async function loadTasks(currentUserId: string) {
     const { data, error } = await supabase
@@ -1502,6 +1510,7 @@ export default function App() {
         )}
 
         <DndContext
+	  sensors={sensors}
           collisionDetection={closestCorners}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
