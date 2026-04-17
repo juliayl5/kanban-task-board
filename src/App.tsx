@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   DndContext,
+  DragOverlay,
   type DragEndEvent,
+  type DragStartEvent,
   closestCorners,
   useDraggable,
   useDroppable,
 } from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 import { supabase } from './lib/supabase'
 
 type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done'
@@ -60,6 +63,21 @@ const columns: { key: TaskStatus; label: string }[] = [
   { key: 'done', label: 'Done' },
 ]
 
+const primaryButtonClass =
+  'rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-50'
+
+const secondaryButtonClass =
+  'rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100'
+
+const subtleButtonClass =
+  'rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100'
+
+const destructiveButtonClass =
+  'rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100 focus:outline-none focus:ring-4 focus:ring-red-100'
+
+const inputClass =
+  'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100'
+
 function statusLabel(status: TaskStatus) {
   switch (status) {
     case 'todo':
@@ -79,6 +97,10 @@ function getColumnId(status: TaskStatus) {
 
 function getTaskDragId(taskId: string) {
   return `task-${taskId}`
+}
+
+function getTaskIdFromDragId(dragId: string) {
+  return dragId.replace('task-', '')
 }
 
 function formatDueDate(dateString: string) {
@@ -118,13 +140,13 @@ function isTaskOverdue(task: Task) {
 function getPriorityBadgeClasses(priority: Priority | null) {
   switch (priority) {
     case 'high':
-      return 'bg-red-100 text-red-700'
+      return 'bg-red-100 text-red-700 ring-1 ring-red-200'
     case 'normal':
-      return 'bg-blue-100 text-blue-700'
+      return 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
     case 'low':
-      return 'bg-emerald-100 text-emerald-700'
+      return 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200'
     default:
-      return 'bg-neutral-200 text-neutral-700'
+      return 'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
   }
 }
 
@@ -142,27 +164,27 @@ function getDueDateBadge(dueDate: string | null, status: TaskStatus) {
   if (status !== 'done' && diffDays < 0) {
     return {
       text: `Overdue · ${formatDueDate(dueDate)}`,
-      classes: 'bg-red-100 text-red-700',
+      classes: 'bg-red-100 text-red-700 ring-1 ring-red-200',
     }
   }
 
   if (status !== 'done' && diffDays === 0) {
     return {
       text: 'Due today',
-      classes: 'bg-amber-100 text-amber-700',
+      classes: 'bg-amber-100 text-amber-700 ring-1 ring-amber-200',
     }
   }
 
   if (status !== 'done' && diffDays <= 2) {
     return {
       text: `Due soon · ${formatDueDate(dueDate)}`,
-      classes: 'bg-amber-100 text-amber-700',
+      classes: 'bg-amber-100 text-amber-700 ring-1 ring-amber-200',
     }
   }
 
   return {
     text: formatDueDate(dueDate),
-    classes: 'bg-neutral-200 text-neutral-700',
+    classes: 'bg-slate-100 text-slate-700 ring-1 ring-slate-200',
   }
 }
 
@@ -204,6 +226,72 @@ function buildTaskUpdateMessage(
   return `Updated ${changedFields.join(', ')}`
 }
 
+function getColumnTone(status: TaskStatus) {
+  switch (status) {
+    case 'todo':
+      return {
+        headerBg: 'bg-slate-50',
+        headerText: 'text-slate-700',
+        countBg: 'bg-slate-200 text-slate-700',
+        dot: 'bg-slate-400',
+      }
+    case 'in_progress':
+      return {
+        headerBg: 'bg-blue-50',
+        headerText: 'text-blue-700',
+        countBg: 'bg-blue-100 text-blue-700',
+        dot: 'bg-blue-500',
+      }
+    case 'in_review':
+      return {
+        headerBg: 'bg-amber-50',
+        headerText: 'text-amber-700',
+        countBg: 'bg-amber-100 text-amber-700',
+        dot: 'bg-amber-500',
+      }
+    case 'done':
+      return {
+        headerBg: 'bg-emerald-50',
+        headerText: 'text-emerald-700',
+        countBg: 'bg-emerald-100 text-emerald-700',
+        dot: 'bg-emerald-500',
+      }
+  }
+}
+
+function getTaskStatusAccent(status: TaskStatus) {
+  switch (status) {
+    case 'todo':
+      return {
+        border: 'border-slate-200',
+        ring: 'hover:ring-slate-200',
+        stripe: 'border-l-slate-400',
+        glow: 'shadow-slate-200/60',
+      }
+    case 'in_progress':
+      return {
+        border: 'border-blue-200',
+        ring: 'hover:ring-blue-200',
+        stripe: 'border-l-blue-500',
+        glow: 'shadow-blue-200/60',
+      }
+    case 'in_review':
+      return {
+        border: 'border-amber-200',
+        ring: 'hover:ring-amber-200',
+        stripe: 'border-l-amber-500',
+        glow: 'shadow-amber-200/60',
+      }
+    case 'done':
+      return {
+        border: 'border-emerald-200',
+        ring: 'hover:ring-emerald-200',
+        stripe: 'border-l-emerald-500',
+        glow: 'shadow-emerald-200/60',
+      }
+  }
+}
+
 function TaskForm({
   heading,
   submitLabel,
@@ -234,14 +322,19 @@ function TaskForm({
   onCancel: () => void
 }) {
   return (
-    <section className="mb-6 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-5">
-      <h2 className="text-lg font-semibold text-neutral-900">{heading}</h2>
+    <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-slate-900">{heading}</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Keep task details concise and scannable.
+        </p>
+      </div>
 
-      <form onSubmit={onSubmit} className="mt-4 space-y-4">
+      <form onSubmit={onSubmit} className="space-y-4">
         <div>
           <label
             htmlFor="taskTitle"
-            className="mb-1 block text-sm font-medium text-neutral-700"
+            className="mb-1.5 block text-sm font-medium text-slate-700"
           >
             Title
           </label>
@@ -251,14 +344,14 @@ function TaskForm({
             value={title}
             onChange={(event) => onTitleChange(event.target.value)}
             placeholder="Enter task title"
-            className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition focus:border-neutral-500"
+            className={inputClass}
           />
         </div>
 
         <div>
           <label
             htmlFor="taskDescription"
-            className="mb-1 block text-sm font-medium text-neutral-700"
+            className="mb-1.5 block text-sm font-medium text-slate-700"
           >
             Description
           </label>
@@ -268,7 +361,7 @@ function TaskForm({
             onChange={(event) => onDescriptionChange(event.target.value)}
             placeholder="Add a short description"
             rows={3}
-            className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition focus:border-neutral-500"
+            className={inputClass}
           />
         </div>
 
@@ -276,7 +369,7 @@ function TaskForm({
           <div>
             <label
               htmlFor="taskPriority"
-              className="mb-1 block text-sm font-medium text-neutral-700"
+              className="mb-1.5 block text-sm font-medium text-slate-700"
             >
               Priority
             </label>
@@ -284,7 +377,7 @@ function TaskForm({
               id="taskPriority"
               value={priority}
               onChange={(event) => onPriorityChange(event.target.value as Priority)}
-              className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition focus:border-neutral-500"
+              className={inputClass}
             >
               <option value="low">Low</option>
               <option value="normal">Normal</option>
@@ -295,7 +388,7 @@ function TaskForm({
           <div>
             <label
               htmlFor="taskDueDate"
-              className="mb-1 block text-sm font-medium text-neutral-700"
+              className="mb-1.5 block text-sm font-medium text-slate-700"
             >
               Due date
             </label>
@@ -304,30 +397,153 @@ function TaskForm({
               type="date"
               value={dueDate}
               onChange={(event) => onDueDateChange(event.target.value)}
-              className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition focus:border-neutral-500"
+              className={inputClass}
             />
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-col gap-3 pt-1 sm:flex-row">
           <button
             type="submit"
             disabled={isSubmitting || title.trim() === ''}
-            className="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className={primaryButtonClass}
           >
             {isSubmitting ? 'Saving...' : submitLabel}
           </button>
 
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-xl border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
-          >
+          <button type="button" onClick={onCancel} className={secondaryButtonClass}>
             Cancel
           </button>
         </div>
       </form>
     </section>
+  )
+}
+
+function TaskCardContent({
+  task,
+  assignees,
+  onEdit,
+  onDelete,
+  onOpenDetails,
+  isOverlay = false,
+}: {
+  task: Task
+  assignees: TeamMember[]
+  onEdit?: (task: Task) => void
+  onDelete?: (task: Task) => void
+  onOpenDetails?: (task: Task) => void
+  isOverlay?: boolean
+}) {
+  const dueDateBadge = getDueDateBadge(task.due_date, task.status)
+  const statusAccent = getTaskStatusAccent(task.status)
+
+  return (
+    <article
+      className={`rounded-2xl border border-l-4 bg-white p-4 shadow-sm transition duration-200 ${statusAccent.border} ${statusAccent.stripe} ${statusAccent.glow} ${
+        isOverlay
+          ? 'rotate-[1deg] shadow-xl ring-2 ring-indigo-200'
+          : `hover:-translate-y-0.5 hover:shadow-md hover:ring-2 ${statusAccent.ring}`
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="break-words text-sm font-semibold text-slate-900">
+            {task.title}
+          </h3>
+        </div>
+
+        {!isOverlay && (
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+            Move
+          </span>
+        )}
+      </div>
+
+      {task.description && (
+        <p className="mt-2 break-words text-sm leading-6 text-slate-600">
+          {task.description}
+        </p>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {task.priority && (
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize ${getPriorityBadgeClasses(task.priority)}`}
+          >
+            {task.priority}
+          </span>
+        )}
+
+        {dueDateBadge && (
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${dueDateBadge.classes}`}
+          >
+            {dueDateBadge.text}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="flex -space-x-2">
+          {assignees.map((member) => (
+            <div
+              key={member.id}
+              title={member.name}
+              className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-[10px] font-semibold text-white shadow-sm"
+              style={{ backgroundColor: member.color }}
+            >
+              {getInitials(member.name)}
+            </div>
+          ))}
+        </div>
+
+        {!isOverlay && onOpenDetails && (
+          <button
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpenDetails(task)
+            }}
+            className={subtleButtonClass}
+          >
+            Details
+          </button>
+        )}
+      </div>
+
+      {!isOverlay && onEdit && onDelete && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              onEdit(task)
+            }}
+            className={subtleButtonClass}
+          >
+            Edit
+          </button>
+
+          <button
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              onDelete(task)
+            }}
+            className={destructiveButtonClass}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+    </article>
   )
 }
 
@@ -347,115 +563,35 @@ function DraggableTaskCard({
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: getTaskDragId(task.id),
+      activationConstraint: {
+        distance: 8,
+      },
     })
 
   const style = transform
     ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        transform: CSS.Translate.toString(transform),
       }
     : undefined
 
-  const dueDateBadge = getDueDateBadge(task.due_date, task.status)
-
-  const priorityBorder =
-    task.priority === 'high'
-      ? 'border-l-4 border-l-red-400'
-      : task.priority === 'normal'
-        ? 'border-l-4 border-l-blue-400'
-        : task.priority === 'low'
-          ? 'border-l-4 border-l-emerald-400'
-          : ''
-
   return (
-    <article
+    <div
       ref={setNodeRef}
       style={style}
-      className={`rounded-xl border border-neutral-200 bg-neutral-50 p-3 shadow-sm transition ${priorityBorder} ${
-        isDragging ? 'opacity-50 shadow-lg' : ''
+      {...listeners}
+      {...attributes}
+      className={`touch-none cursor-grab active:cursor-grabbing ${
+        isDragging ? 'opacity-35' : ''
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="break-words font-medium text-neutral-900">{task.title}</h3>
-        </div>
-
-        <button
-          type="button"
-          {...listeners}
-          {...attributes}
-          className="shrink-0 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-500 transition hover:bg-neutral-100"
-          title="Drag task"
-          aria-label={`Drag ${task.title}`}
-        >
-          Drag
-        </button>
-      </div>
-
-      {task.description && (
-        <p className="mt-2 break-words text-sm leading-6 text-neutral-600">
-          {task.description}
-        </p>
-      )}
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        {task.priority && (
-          <span
-            className={`rounded-full px-2 py-1 text-xs font-medium capitalize ${getPriorityBadgeClasses(task.priority)}`}
-          >
-            {task.priority}
-          </span>
-        )}
-
-        {dueDateBadge && (
-          <span
-            className={`rounded-full px-2 py-1 text-xs font-medium ${dueDateBadge.classes}`}
-          >
-            {dueDateBadge.text}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <div className="flex -space-x-2">
-          {assignees.map((member) => (
-            <div
-              key={member.id}
-              title={member.name}
-              className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-xs font-semibold text-white shadow-sm"
-              style={{ backgroundColor: member.color }}
-            >
-              {getInitials(member.name)}
-            </div>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          onClick={() => onOpenDetails(task)}
-          className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100"
-        >
-          Details
-        </button>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => onEdit(task)}
-          className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100"
-        >
-          Edit
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onDelete(task)}
-          className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100"
-        >
-          Delete
-        </button>
-      </div>
-    </article>
+      <TaskCardContent
+        task={task}
+        assignees={assignees}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onOpenDetails={onOpenDetails}
+      />
+    </div>
   )
 }
 
@@ -480,27 +616,33 @@ function DroppableColumn({
     id: getColumnId(status),
   })
 
+  const tone = getColumnTone(status)
+
   return (
     <div
       ref={setNodeRef}
-      className={`rounded-2xl border bg-white p-4 shadow-sm transition ${
-        isOver
-          ? 'border-neutral-500 ring-2 ring-neutral-300'
-          : 'border-neutral-200'
+      className={`overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition ${
+        isOver ? 'border-indigo-300 ring-2 ring-indigo-200' : ''
       }`}
     >
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">
-          {label}
-        </h2>
-        <span className="rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-600">
+      <div
+        className={`flex items-center justify-between border-b border-slate-100 px-4 py-3 ${tone.headerBg}`}
+      >
+        <div className="flex items-center gap-2">
+          <span className={`h-2.5 w-2.5 rounded-full ${tone.dot}`} />
+          <h2 className={`text-xs font-semibold uppercase tracking-[0.14em] ${tone.headerText}`}>
+            {label}
+          </h2>
+        </div>
+
+        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone.countBg}`}>
           {tasks.length}
         </span>
       </div>
 
-      <div className="min-h-[120px] space-y-3">
+      <div className="min-h-[240px] space-y-3 bg-white p-4">
         {tasks.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-neutral-300 p-4 text-sm text-neutral-500">
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-5 text-sm text-slate-400">
             No matching tasks
           </div>
         ) : (
@@ -558,6 +700,7 @@ export default function App() {
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all')
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const [activeDragTaskId, setActiveDragTaskId] = useState<string | null>(null)
 
   async function loadTasks(currentUserId: string) {
     const { data, error } = await supabase
@@ -682,6 +825,11 @@ export default function App() {
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === selectedTaskId) ?? null,
     [tasks, selectedTaskId],
+  )
+
+  const activeDragTask = useMemo(
+    () => tasks.find((task) => task.id === activeDragTaskId) ?? null,
+    [tasks, activeDragTaskId],
   )
 
   useEffect(() => {
@@ -980,8 +1128,17 @@ export default function App() {
     }
   }
 
+  function handleDragStart(event: DragStartEvent) {
+    const activeId = String(event.active.id)
+    if (activeId.startsWith('task-')) {
+      setActiveDragTaskId(getTaskIdFromDragId(activeId))
+    }
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
+
+    setActiveDragTaskId(null)
 
     if (!over || !userId) {
       return
@@ -994,7 +1151,7 @@ export default function App() {
       return
     }
 
-    const taskId = activeId.replace('task-', '')
+    const taskId = getTaskIdFromDragId(activeId)
     const nextStatus = overId.replace('column-', '') as TaskStatus
     const task = tasks.find((item) => item.id === taskId)
 
@@ -1081,10 +1238,12 @@ export default function App() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-neutral-100 p-4 sm:p-6">
+      <main className="min-h-screen bg-slate-50 p-4 sm:p-6">
         <div className="mx-auto max-w-7xl">
-          <h1 className="text-3xl font-semibold tracking-tight">Task Board</h1>
-          <p className="mt-2 text-sm text-neutral-600">Loading your board...</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+            Task Board
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">Loading your board...</p>
         </div>
       </main>
     )
@@ -1092,31 +1251,41 @@ export default function App() {
 
   if (fatalError) {
     return (
-      <main className="min-h-screen bg-neutral-100 p-4 sm:p-6">
-        <div className="mx-auto max-w-3xl rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
+      <main className="min-h-screen bg-slate-50 p-4 sm:p-6">
+        <div className="mx-auto max-w-3xl rounded-3xl border border-red-200 bg-white p-6 shadow-sm">
           <h1 className="text-2xl font-semibold text-red-700">
             Something went wrong
           </h1>
-          <p className="mt-2 text-sm text-neutral-700">{fatalError}</p>
+          <p className="mt-2 text-sm text-slate-600">{fatalError}</p>
         </div>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-neutral-100 p-4 sm:p-6">
+    <main className="min-h-screen bg-slate-50 p-4 sm:p-6">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <h1 className="text-3xl font-semibold tracking-tight">Task Board</h1>
-            <p className="mt-2 break-all text-sm text-neutral-600">
-              Guest user: {userId}
+            <p className="text-sm font-medium text-indigo-600">Next Play Board</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">
+              Task Board
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+              A lightweight Kanban workspace for planning, assigning, and tracking
+              work across the team.
+            </p>
+            <p
+              className="mt-3 text-xs text-slate-400"
+              title={userId ?? undefined}
+            >
+              Guest session active · {userId ? `${userId.slice(0, 8)}…` : ''}
             </p>
             {isMovingTask && (
-              <p className="mt-2 text-sm text-neutral-500">Saving move...</p>
+              <p className="mt-2 text-sm text-slate-500">Saving move...</p>
             )}
             {deletingTaskId && (
-              <p className="mt-2 text-sm text-neutral-500">Deleting task...</p>
+              <p className="mt-2 text-sm text-slate-500">Deleting task...</p>
             )}
           </div>
 
@@ -1128,7 +1297,7 @@ export default function App() {
                 closeEditForm()
                 setShowCreateForm((current) => !current)
               }}
-              className="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-neutral-800"
+              className={primaryButtonClass}
             >
               {showCreateForm ? 'Close Form' : '+ New Task'}
             </button>
@@ -1139,39 +1308,41 @@ export default function App() {
                 setActionError(null)
                 setShowTeamForm((current) => !current)
               }}
-              className="rounded-xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+              className={secondaryButtonClass}
             >
               {showTeamForm ? 'Close Team Form' : '+ Add Team Member'}
             </button>
           </div>
         </header>
 
-        <section className="mb-6 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div>
-            <h2 className="text-lg font-semibold text-neutral-900">Team</h2>
-            <p className="mt-1 text-sm text-neutral-500">
-              Add members and assign them inside the task detail drawer
+            <h2 className="text-lg font-semibold text-slate-900">Team</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Add members once, then assign them inside the task detail drawer.
             </p>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-3">
             {teamMembers.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-neutral-300 px-4 py-3 text-sm text-neutral-500">
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-400">
                 No team members yet
               </div>
             ) : (
               teamMembers.map((member) => (
                 <div
                   key={member.id}
-                  className="flex items-center gap-2 rounded-full border border-neutral-200 bg-neutral-50 px-3 py-2"
+                  className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2"
                 >
                   <div
-                    className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold text-white"
                     style={{ backgroundColor: member.color }}
                   >
                     {getInitials(member.name)}
                   </div>
-                  <span className="text-sm text-neutral-800">{member.name}</span>
+                  <span className="text-sm font-medium text-slate-700">
+                    {member.name}
+                  </span>
                 </div>
               ))
             )}
@@ -1180,27 +1351,27 @@ export default function App() {
           {showTeamForm && (
             <form
               onSubmit={handleCreateTeamMember}
-              className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px_auto]"
+              className="mt-5 grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px_auto]"
             >
               <input
                 type="text"
                 value={newMemberName}
                 onChange={(event) => setNewMemberName(event.target.value)}
                 placeholder="Member name"
-                className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition focus:border-neutral-500"
+                className={inputClass}
               />
 
               <input
                 type="color"
                 value={newMemberColor}
                 onChange={(event) => setNewMemberColor(event.target.value)}
-                className="h-11 w-full rounded-xl border border-neutral-300 bg-white px-2 py-2"
+                className="h-11 w-full rounded-xl border border-slate-300 bg-white px-2 py-2"
               />
 
               <button
                 type="submit"
                 disabled={isCreatingMember || newMemberName.trim() === ''}
-                className="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className={primaryButtonClass}
               >
                 {isCreatingMember ? 'Adding...' : 'Add Member'}
               </button>
@@ -1212,22 +1383,22 @@ export default function App() {
           {stats.map((stat) => (
             <div
               key={stat.label}
-              className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"
+              className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
             >
-              <p className="text-sm text-neutral-500">{stat.label}</p>
-              <p className="mt-2 text-2xl font-semibold text-neutral-900">
+              <p className="text-sm text-slate-500">{stat.label}</p>
+              <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
                 {stat.value}
               </p>
             </div>
           ))}
         </section>
 
-        <section className="mb-6 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_auto] lg:items-end">
             <div>
               <label
                 htmlFor="search"
-                className="mb-1 block text-sm font-medium text-neutral-700"
+                className="mb-1.5 block text-sm font-medium text-slate-700"
               >
                 Search tasks
               </label>
@@ -1237,14 +1408,14 @@ export default function App() {
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search by title or description"
-                className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition focus:border-neutral-500"
+                className={inputClass}
               />
             </div>
 
             <div>
               <label
                 htmlFor="priorityFilter"
-                className="mb-1 block text-sm font-medium text-neutral-700"
+                className="mb-1.5 block text-sm font-medium text-slate-700"
               >
                 Priority filter
               </label>
@@ -1254,7 +1425,7 @@ export default function App() {
                 onChange={(event) =>
                   setPriorityFilter(event.target.value as PriorityFilter)
                 }
-                className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition focus:border-neutral-500"
+                className={inputClass}
               >
                 <option value="all">All priorities</option>
                 <option value="low">Low only</option>
@@ -1270,20 +1441,20 @@ export default function App() {
                   setSearchQuery('')
                   setPriorityFilter('all')
                 }}
-                className="rounded-xl border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+                className={secondaryButtonClass}
               >
                 Clear filters
               </button>
             </div>
           </div>
 
-          <p className="mt-3 text-sm text-neutral-500">
+          <p className="mt-3 text-sm text-slate-500">
             Showing {filteredTasks.length} of {tasks.length} tasks
           </p>
         </section>
 
         {actionError && (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mb-6 rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {actionError}
           </div>
         )}
@@ -1330,7 +1501,12 @@ export default function App() {
           />
         )}
 
-        <DndContext collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+        <DndContext
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveDragTaskId(null)}
+        >
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {columns.map((column) => (
               <DroppableColumn
@@ -1345,23 +1521,38 @@ export default function App() {
               />
             ))}
           </section>
+
+          <DragOverlay>
+            {activeDragTask ? (
+              <div className="w-[320px] max-w-[90vw]">
+                <TaskCardContent
+                  task={activeDragTask}
+                  assignees={getAssigneesForTask(activeDragTask.id)}
+                  isOverlay
+                />
+              </div>
+            ) : null}
+          </DragOverlay>
         </DndContext>
       </div>
 
       {selectedTask && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-black/25"
+            className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[1px]"
             onClick={() => setSelectedTaskId(null)}
           />
 
-          <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-md overflow-y-auto border-l border-neutral-200 bg-white p-5 shadow-2xl">
+          <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-md overflow-y-auto border-l border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <h2 className="break-words text-xl font-semibold text-neutral-900">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  Task details
+                </p>
+                <h2 className="mt-1 break-words text-2xl font-semibold tracking-tight text-slate-900">
                   {selectedTask.title}
                 </h2>
-                <p className="mt-1 text-sm text-neutral-500">
+                <p className="mt-2 text-sm text-slate-500">
                   {statusLabel(selectedTask.status)}
                 </p>
               </div>
@@ -1369,16 +1560,16 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setSelectedTaskId(null)}
-                className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 transition hover:bg-neutral-50"
+                className={secondaryButtonClass}
               >
                 Close
               </button>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-5 flex flex-wrap gap-2">
               {selectedTask.priority && (
                 <span
-                  className={`rounded-full px-2 py-1 text-xs font-medium capitalize ${getPriorityBadgeClasses(selectedTask.priority)}`}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize ${getPriorityBadgeClasses(selectedTask.priority)}`}
                 >
                   {selectedTask.priority}
                 </span>
@@ -1386,9 +1577,9 @@ export default function App() {
 
               {selectedTask.due_date && (
                 <span
-                  className={`rounded-full px-2 py-1 text-xs font-medium ${
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                     getDueDateBadge(selectedTask.due_date, selectedTask.status)?.classes ??
-                    'bg-neutral-200 text-neutral-700'
+                    'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
                   }`}
                 >
                   {getDueDateBadge(selectedTask.due_date, selectedTask.status)?.text ??
@@ -1397,30 +1588,30 @@ export default function App() {
               )}
             </div>
 
-            <div className="mt-6">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">
+            <div className="mt-8">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Description
               </h3>
 
-              <div className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 {selectedTask.description ? (
-                  <p className="text-sm leading-6 text-neutral-700">
+                  <p className="text-sm leading-6 text-slate-700">
                     {selectedTask.description}
                   </p>
                 ) : (
-                  <p className="text-sm text-neutral-500">No description</p>
+                  <p className="text-sm text-slate-400">No description</p>
                 )}
               </div>
             </div>
 
             <div className="mt-8">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Assignees
               </h3>
 
               <div className="mt-3 space-y-2">
                 {teamMembers.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-neutral-300 p-4 text-sm text-neutral-500">
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-400">
                     No team members yet. Add team members from the main page first.
                   </div>
                 ) : (
@@ -1432,16 +1623,16 @@ export default function App() {
                     return (
                       <div
                         key={member.id}
-                        className="flex items-center justify-between rounded-xl border border-neutral-200 p-3"
+                        className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3"
                       >
                         <div className="flex items-center gap-3">
                           <div
-                            className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white"
+                            className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold text-white"
                             style={{ backgroundColor: member.color }}
                           >
                             {getInitials(member.name)}
                           </div>
-                          <span className="text-sm text-neutral-800">
+                          <span className="text-sm font-medium text-slate-800">
                             {member.name}
                           </span>
                         </div>
@@ -1450,7 +1641,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => unassignMemberFromTask(selectedTask, member)}
-                            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-50"
+                            className={subtleButtonClass}
                           >
                             Remove
                           </button>
@@ -1458,7 +1649,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => assignMemberToTask(selectedTask, member)}
-                            className="rounded-lg bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-800"
+                            className={primaryButtonClass}
                           >
                             Assign
                           </button>
@@ -1471,26 +1662,31 @@ export default function App() {
             </div>
 
             <div className="mt-8">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Activity
               </h3>
 
               <div className="mt-3 space-y-3">
                 {getLogsForTask(selectedTask.id).length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-neutral-300 p-4 text-sm text-neutral-500">
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-400">
                     No activity yet
                   </div>
                 ) : (
                   getLogsForTask(selectedTask.id).map((log) => (
                     <div
                       key={log.id}
-                      className="rounded-xl border border-neutral-200 bg-neutral-50 p-3"
+                      className="relative rounded-2xl border border-slate-200 bg-slate-50 p-4 pl-5"
                     >
-                      <p className="text-sm text-neutral-800">{log.message}</p>
-                      <p className="mt-1 text-xs text-neutral-500">
-                        {formatRelativeTime(log.created_at)} ·{' '}
-                        {new Date(log.created_at).toLocaleString()}
-                      </p>
+                      <span className="absolute left-3 top-5 h-2 w-2 rounded-full bg-indigo-500" />
+                      <div className="border-l border-slate-200 pl-4">
+                        <p className="text-sm font-medium text-slate-800">
+                          {log.message}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {formatRelativeTime(log.created_at)} ·{' '}
+                          {new Date(log.created_at).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
                   ))
                 )}
